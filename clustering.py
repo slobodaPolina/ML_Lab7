@@ -1,47 +1,51 @@
-from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import PCA
 from sklearn.metrics import v_measure_score, silhouette_score
 import matplotlib.pyplot as plt
-
+import numpy as np
 from prepare_data import prepare_data
-from plot import plot_clusters
-from parameters import parameter_grid
+from hierarchical import hierarchical
 
 
-data_csv = './data/glass.csv'
+def plot_clusters(num_clusters, values, labels, plt, filename):
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(1, 1, 1)
+    plt.get_cmap('gist_rainbow')
 
-dataset, features, labels, num_classes = prepare_data(data_csv)
+    for cluster_num in range(num_clusters):
+        cluster_points = []
+        for i in range(len(labels)):
+            if labels[i] == cluster_num:
+                cluster_points.append(values[i])
+        cluster_points = np.array(cluster_points)
+        ax.scatter(cluster_points[:, 0], cluster_points[:, 1])
+    fig.savefig('./results/{}'.format(filename))
 
 
+dataset, features, labels, num_classes = prepare_data()
 results = []
-
-for configuration in parameter_grid:
-    model = AgglomerativeClustering(**configuration)
-
-    predicted_clusters = model.fit_predict(features)
-
+CLUSTERS_RANGE = range(2, 10)
+# проверка всех значений числа кластеров - от 1 до n
+for i in CLUSTERS_RANGE:
+    predicted_clusters = hierarchical(features, i)
+    # the harmonic mean between homogeneity and completeness:
     v_score = v_measure_score(labels, predicted_clusters)
-
-    results.append({'params': configuration, 'score': v_score})
+    results.append({'clusters': i, 'score': v_score})
 
 results = sorted(results, key=lambda k: k['score'], reverse=True)
-best_params = results[0]['params']
+best_clusters = results[0]['clusters']
+print("BEST " + str(best_clusters))
 
 
-model = AgglomerativeClustering(**best_params)
-predicted_clusters = model.fit_predict(features)
-
+predicted_clusters = hierarchical(features, best_clusters)
 v_score = v_measure_score(labels, predicted_clusters)
+# (b - a) / max(a, b). To clarify, b is the distance between a sample and the nearest cluster that the sample is not a part of. mean intra-cluster distance (a)
 silhouette_score = silhouette_score(features, predicted_clusters)
-
-print('V-measure score (external metric): {}'.format(v_score))
-print('Silhouette score (internal metric): {}'.format(silhouette_score))
+print('EXTERNAL: {}'.format(v_score))
+print('INTERNAL: {}'.format(silhouette_score))
 
 
 pca = PCA(n_components=2)
-principalComponents = pca.fit_transform(features)
-
-plot_clusters(best_params['n_clusters'], principalComponents, predicted_clusters, plt, 'predicted_clusters')
-plot_clusters(num_classes, principalComponents, labels, plt, 'true_clusters')
-
+transformed_features = pca.fit_transform(features)
+plot_clusters(best_clusters, transformed_features, predicted_clusters, plt, 'predicted')
+plot_clusters(num_classes, transformed_features, labels, plt, 'original')
 plt.show()
